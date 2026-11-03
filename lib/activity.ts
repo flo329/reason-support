@@ -33,4 +33,8 @@ export const ACTION_LABELS: Record<string, string> = {
   "ticket.internal_note": "Added internal note",
   "scoring.rescore": "Rescored all tickets",
   "settings.scoring": "Updated scoring settings",
+  "settings.orders": "Updated order-problem settings",
+  "problem.handled": "Marked order problem handled",
+  "problem.reopened": "Reopened order problem",
+  "sync.shopify.manual": "Triggered Shopify sync",
 };

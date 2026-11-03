@@ -3,7 +3,7 @@
 Internal platform for the Reason Clothing support team. It sits on top of Gorgias, Shopify and A2000 and adds:
 urgent-ticket detection, proactive order-problem alerts, and an activity log.
 
-**Status: Phase 2:** login, Gorgias sync + webhooks, urgency scoring, Urgent Tickets dashboard with actions, Slack alerts, scoring settings.
+**Status: Phase 3:** login, Gorgias sync + webhooks, urgency scoring, Urgent Tickets dashboard, Slack alerts, settings, Shopify (multiple stores) + Order Problems monitor.
 
 > v1 never sends anything to customers automatically. Every customer-facing message requires an agent click.
 
@@ -38,7 +38,7 @@ npm run dev                       # http://localhost:3000
 npm run worker                    # in a second terminal
 ```
 
-No Gorgias key yet? Run `npm run seed:demo` to load 6 fake tickets. Remove them with `npm run demo:clear` before going live.
+No keys yet? Run `npm run seed:demo` to load 6 fake tickets plus 7 orders in two demo Shopify stores. Remove them with `npm run demo:clear` before going live.
 
 Tests: `npm test`. Type check: `npm run typecheck`.
 
@@ -93,6 +93,43 @@ Polling every 3 minutes works without this. Webhooks make new messages show up w
 
 The endpoint stores the event, replies right away, and then re-syncs the ticket in the background. Any event left unprocessed is picked up by the worker within a minute.
 
+## Shopify setup (each store)
+
+1. **Get an Admin API access token** (`shpat_...`). Use the Shopify Dev Dashboard (or, for an existing admin-created custom app: **Settings → Apps → Develop apps**). It needs these Admin API scopes: `read_orders`, `read_products`, `read_inventory`, `read_locations`, `read_customers`, `read_fulfillments`. Add `read_all_orders` if you want orders older than 60 days.
+2. Copy the app's **API secret key** too. Shopify signs webhooks with it.
+3. Add the store to `.env` (see `.env.example`): `SHOPIFY_STORES`, then `SHOPIFY_<KEY>_DOMAIN`, `_TOKEN`, `_WEBHOOK_SECRET` and an optional `_NAME`.
+4. Test the token: `npm run shopify -- check`
+5. Run the first sync: `npm run shopify -- sync`. This imports orders updated in the last 30 days plus all open unfulfilled orders, the stock for those items, and then detects problems.
+
+### Register Shopify webhooks
+
+These are optional, because the worker polls every 5 minutes. With webhooks, cancellations and stock changes show up within seconds.
+
+- **Automatic:** set `APP_URL` to the public HTTPS URL, then run `npm run shopify -- webhooks`. This creates `orders/cancelled`, `orders/updated` and `inventory_levels/update` subscriptions pointing at `APP_URL/api/webhooks/shopify/<store key>`. Running it again is safe.
+- **Manual alternative:** Shopify admin → **Settings → Notifications → Webhooks → Create webhook**. Use the same three events, JSON format and URL. Webhooks created this way are signed with the secret shown on that page, so use it as `SHOPIFY_<KEY>_WEBHOOK_SECRET`.
+
+Every webhook is checked with `X-Shopify-Hmac-Sha256`. The app then re-fetches the order or stock over GraphQL, so it never trusts the payload alone.
+
+## Order problems
+
+Detection lives in `lib/problems/detect.ts`, a pure function with unit tests in `tests/oversold.test.ts`.
+
+| Problem | Rule |
+| --- | --- |
+| Cancelled | Cancelled in the last 14 days. Shows the reason (customer, fraud check, payment declined, inventory, staff…) and the refund status (full, partial, none). |
+| Out of stock | An unfulfilled order contains a tracked item with **nothing on hand**. |
+| Oversold | Some stock exists, but not enough for every open order. Stock goes to the oldest orders first, and the newer orders that can't be covered are flagged. Each card shows how many units are short. |
+| Delayed | Unfulfilled for more than 3 days. Orders still waiting on payment are skipped. |
+
+**Why on-hand and not "available":** Shopify's *available* already subtracts units reserved for unfulfilled orders. *Available = 0* often just means the open orders took the last units, which is fine. So we compare open-order demand with **on-hand** stock instead. Demand also uses Shopify's *committed* count, so older orders outside our sync window are included. When A2000 is connected (Phase 5), the lower of Shopify and A2000 stock is used.
+
+**Other behaviour:**
+- Stock from excluded locations (e.g. Returns) is ignored. Configure this in **Settings → Order problems**.
+- A problem resolves itself when the condition goes away, for example when stock arrives or the order ships.
+- Each problem links to the customer's open Gorgias ticket, matched by email or by an order number mentioned in the ticket. That ticket gets a +20 urgency boost and shows the order and store.
+- Shopify customer history (order count and lifetime spend) flows into the VIP and repeat-customer scoring.
+- **Mark handled** records who handled the problem and when. **Notify customer** arrives in Phase 4.
+
 ## Urgency scoring
 
 Every open ticket gets a score from 0 to 100. Scores are recalculated whenever a ticket syncs, and every 5 minutes because waiting time keeps growing. The logic is in `lib/scoring/engine.ts` and is covered by unit tests. All weights and keyword lists can be changed on **Settings** (admins only).
@@ -104,9 +141,9 @@ Every open ticket gets a score from 0 to 100. Scores are recalculated whenever a
 | Threat keywords (EN + ES, whole words, case and accents ignored) | legal 35, chargeback 30, fraud 20, public/review 15, escalation 10; max 50 combined |
 | Angry tone | ALL CAPS 8, `!!!` 5, insults 10; max 15 |
 | Claude AI urgency (optional) | +5 per level (0–3), plus any threats it finds and a one-line reason |
-| VIP (ticket tag `vip`) / repeat customer | +10 / +5 |
-| Order value | ≥ $150 +5, ≥ $300 +10 (Phase 3) |
-| Linked order problem | +20 (Phase 3) |
+| VIP (ticket tag `vip`, or Shopify lifetime spend ≥ $500) / repeat customer (≥ 3 orders) | +10 / +5 |
+| Order value (linked Shopify order) | ≥ $150 +5, ≥ $300 +10 |
+| Linked order problem (not yet handled) | +20 |
 | Agent replied last | score × 0.5 |
 
 Auto-replies from Gorgias rules and internal notes don't count as an agent reply.

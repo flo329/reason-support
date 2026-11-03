@@ -44,6 +44,8 @@ export async function rescoreTickets(ids?: number[]): Promise<RescoreSummary> {
     include: ticketInclude,
   });
 
+  const orderData = await loadOrderData(tickets);
+
   const summary: RescoreSummary = { scored: 0, aiCalls: 0, alerts: 0 };
   const pendingAlerts: { ticket: TicketWithData; result: ScoreResult; ai: AiSignal | null; kind: "score" | ThreatCategory[] }[] = [];
   const useAi = cfg.ai.enabled && aiEnabled();
@@ -90,6 +92,11 @@ export async function rescoreTickets(ids?: number[]): Promise<RescoreSummary> {
       t.customer?.vip === true ||
       t.tags.some((tag) => cfg.customer.vipTags.some((v) => v.toLowerCase() === tag.toLowerCase()));
 
+    const linked = orderData.forTicket(t);
+    if (linked.orderId !== t.linkedOrderId) {
+      await prisma.ticket.update({ where: { id: t.id }, data: { linkedOrderId: linked.orderId } });
+    }
+
     const result = scoreTicket(
       {
         unansweredCount: t.unansweredCount,
@@ -97,8 +104,8 @@ export async function rescoreTickets(ids?: number[]): Promise<RescoreSummary> {
         customerText,
         isVip,
         ordersCount: t.customer?.ordersCount,
-        orderValue: null, // phase 3: linked Shopify order value
-        orderProblems: [], // phase 3: linked order problems
+        orderValue: linked.orderValue,
+        orderProblems: linked.problems,
         ai,
       },
       cfg,
@@ -164,4 +171,47 @@ async function sendAlerts(
     await postSlack(`…and ${alerts.length - SLACK_MAX_PER_RUN} more urgent tickets. Open the Urgent Tickets dashboard.`);
   }
   return alerts.length;
+}
+
+/**
+ * Batch-load Shopify orders and open order problems for a set of tickets.
+ * A ticket's order = an order whose number the customer mentioned (preferring the same email),
+ * otherwise the customer's most recent order by email.
+ */
+async function loadOrderData(tickets: TicketWithData[]) {
+  const emails = [...new Set(tickets.map((t) => t.customer?.email?.toLowerCase()).filter((e): e is string => Boolean(e)))];
+  const numbers = [...new Set(tickets.flatMap((t) => t.orderNumbers))];
+  const orders =
+    emails.length || numbers.length
+      ? await prisma.shopifyOrder.findMany({
+          where: { OR: [{ email: { in: emails } }, { number: { in: numbers } }] },
+          select: { id: true, number: true, email: true, totalPrice: true },
+          orderBy: { shopifyCreatedAt: "desc" },
+        })
+      : [];
+  const problems = await prisma.orderProblem.findMany({
+    where: {
+      resolvedAt: null,
+      status: { not: "HANDLED" },
+      OR: [{ linkedTicketId: { in: tickets.map((t) => t.id) } }, { orderId: { in: orders.map((o) => o.id) } }],
+    },
+    select: { orderId: true, type: true, linkedTicketId: true },
+  });
+
+  return {
+    forTicket(t: TicketWithData) {
+      const email = t.customer?.email?.toLowerCase();
+      const byNumber = orders.filter((o) => t.orderNumbers.includes(o.number));
+      const byEmail = email ? orders.filter((o) => o.email === email) : [];
+      const matched = [...byNumber.filter((o) => o.email === email), ...byNumber, ...byEmail];
+      const orderIds = new Set(matched.map((o) => o.id));
+      const linked = matched[0] ?? null;
+      const types = problems.filter((p) => p.linkedTicketId === t.id || orderIds.has(p.orderId)).map((p) => p.type as string);
+      return {
+        orderId: linked?.id ?? null,
+        orderValue: linked ? Number(linked.totalPrice) : null,
+        problems: [...new Set(types)],
+      };
+    },
+  };
 }

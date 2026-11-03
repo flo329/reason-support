@@ -15,7 +15,8 @@
     "demo:clear": "tsx scripts/seed-demo.ts --clear",
     "sync:gorgias": "tsx scripts/sync-once.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "shopify": "tsx scripts/shopify.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.4.0",

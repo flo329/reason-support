@@ -25,6 +25,7 @@ model User {
   createdAt      DateTime      @default(now())
   lastLoginAt    DateTime?
   activities     ActivityLog[]
+  handledProblems OrderProblem[]
 }
 
 /// Gorgias helpdesk users (agents), synced from the API.
@@ -83,6 +84,9 @@ model Ticket {
   messagesSyncedAt      DateTime?
   /// Order numbers mentioned in the ticket (e.g. "#RC10482" -> "10482")
   orderNumbers          String[]
+  /// Shopify order linked to this ticket (by order number or customer email), set by scoring
+  linkedOrderId         String?
+  linkedOrder           ShopifyOrder?   @relation(fields: [linkedOrderId], references: [id], onDelete: SetNull)
   demo                  Boolean         @default(false)
   messages              TicketMessage[]
   score                 TicketScore?
@@ -174,4 +178,125 @@ model TicketScore {
   threatAlertedAt DateTime?
 
   @@index([score])
+}
+
+// ---------------------------------------------------------------- Shopify (phase 3)
+
+model Store {
+  key       String         @id
+  name      String
+  domain    String         @unique
+  demo      Boolean        @default(false)
+  orders    ShopifyOrder[]
+  updatedAt DateTime       @updatedAt
+}
+
+model ShopifyOrder {
+  /// Shopify GID, e.g. gid://shopify/Order/123
+  id                  String            @id
+  storeKey            String
+  store               Store             @relation(fields: [storeKey], references: [key])
+  /// Display name, e.g. "#RC10482"
+  name                String
+  /// Digits of the name, e.g. "10482" – used to match order numbers mentioned in tickets
+  number              String
+  email               String?
+  customerId          String?
+  customerName        String?
+  customerOrdersCount Int?
+  customerAmountSpent Decimal?          @db.Decimal(12, 2)
+  shopifyCreatedAt    DateTime
+  shopifyUpdatedAt    DateTime
+  cancelledAt         DateTime?
+  cancelReason        String?
+  financialStatus     String?
+  fulfillmentStatus   String?
+  totalPrice          Decimal           @db.Decimal(12, 2)
+  totalRefunded       Decimal           @default(0) @db.Decimal(12, 2)
+  currency            String?
+  closed              Boolean           @default(false)
+  test                Boolean           @default(false)
+  tags                String[]
+  demo                Boolean           @default(false)
+  lineItems           ShopifyLineItem[]
+  problems            OrderProblem[]
+  tickets             Ticket[]
+  syncedAt            DateTime          @updatedAt
+
+  @@index([storeKey, number])
+  @@index([email])
+  @@index([cancelledAt])
+}
+
+model ShopifyLineItem {
+  id                  String       @id
+  orderId             String
+  order               ShopifyOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sku                 String?
+  title               String
+  variantTitle        String?
+  variantId           String?
+  inventoryItemId     String?
+  tracked             Boolean      @default(true)
+  quantity            Int
+  unfulfilledQuantity Int
+
+  @@index([inventoryItemId])
+  @@index([sku])
+}
+
+/// Inventory per item and location (only items that appear on open orders are synced).
+model InventoryLevel {
+  id              String   @id @default(cuid())
+  storeKey        String
+  inventoryItemId String
+  locationId      String
+  locationName    String?
+  sku             String?
+  tracked         Boolean  @default(true)
+  available       Int
+  onHand          Int
+  committed       Int
+  updatedAt       DateTime @updatedAt
+
+  @@unique([storeKey, inventoryItemId, locationId])
+  @@index([storeKey, sku])
+}
+
+enum ProblemType {
+  CANCELLED
+  OUT_OF_STOCK
+  OVERSOLD
+  STUCK
+}
+
+enum ProblemStatus {
+  OPEN
+  NOTIFIED
+  HANDLED
+}
+
+model OrderProblem {
+  id             String        @id @default(cuid())
+  orderId        String
+  order          ShopifyOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  storeKey       String
+  type           ProblemType
+  /// Affected SKUs
+  skus           String[]
+  /// Type-specific data: reason/refund (cancelled), items + shortfall (stock), days open (stuck)
+  details        Json
+  status         ProblemStatus @default(OPEN)
+  detectedAt     DateTime      @default(now())
+  /// Set when the condition disappears (e.g. stock arrived, order fulfilled)
+  resolvedAt     DateTime?
+  contactedAt    DateTime?
+  handledAt      DateTime?
+  handledById    String?
+  handledBy      User?         @relation(fields: [handledById], references: [id])
+  linkedTicketId Int?
+
+  @@unique([orderId, type])
+  @@index([status, type])
+  @@index([linkedTicketId])
 }

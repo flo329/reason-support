@@ -137,5 +137,5 @@ export function formatHours(h: number) {
 }
 
 function problemLabel(p: string) {
-  return p.toLowerCase().replace(/_/g, " ");
+  return p === "STUCK" ? "delayed" : p.toLowerCase().replace(/_/g, " ");
 }

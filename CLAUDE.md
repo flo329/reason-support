@@ -5,7 +5,8 @@ Internal support platform for Reason Clothing (Gorgias + Shopify + A2000). See R
 ## Status
 - Phase 1 done: auth, Gorgias client/sync/webhooks, ticket cache.
 - Phase 2 done: urgency scoring (`lib/scoring/`), Urgent Tickets page + actions, Slack alerts, scoring settings.
-- Next: Phase 3 – Shopify (multiple stores) + Order Problems monitor. Then Phase 4 (notify-customer templates via Gorgias), Phase 5 (A2000 adapter, polish).
+- Phase 3 done (built against demo data; real-store test pending): Shopify client/sync/webhooks (`lib/shopify/`), problem detection (`lib/problems/`), Order Problems page.
+- Next: verify Phase 3 against the real stores (`npm run shopify -- check` / `sync`), then Phase 4 (notify-customer templates via Gorgias), Phase 5 (A2000 adapter, polish).
 - The user approves each phase before the next one starts. Stop after each phase with run/test instructions.
 
 ## Rules from the user

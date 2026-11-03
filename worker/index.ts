@@ -9,6 +9,10 @@ import { env } from "@/lib/env";
 import { prisma } from "@/lib/db";
 import { processPendingGorgiasWebhooks, syncAgents, syncTicketsIncremental } from "@/lib/gorgias/sync";
 import { rescoreTickets } from "@/lib/scoring/run";
+import { shopifyConfigured } from "@/lib/shopify/stores";
+import { syncAllStores } from "@/lib/shopify/sync";
+import { processPendingShopifyWebhooks } from "@/lib/shopify/webhooks";
+import { runProblemDetection } from "@/lib/problems/run";
 
 const running = new Set<string>();
 
@@ -43,6 +47,16 @@ function main() {
     // Kick off immediately on start
     void job("gorgias:agents", syncAgents).then(() => job("gorgias:poll", syncTicketsIncremental));
   }
+  if (!shopifyConfigured()) {
+    console.warn("[worker] No Shopify stores configured (SHOPIFY_STORES / SHOPIFY_<KEY>_DOMAIN / _TOKEN). Shopify jobs are disabled.");
+  } else {
+    const shopifyPoll = async () => ({ sync: await syncAllStores(), detect: await runProblemDetection() });
+    cron.schedule(process.env.SHOPIFY_POLL_CRON ?? "*/5 * * * *", () => job("shopify:poll", shopifyPoll));
+    cron.schedule("* * * * *", () => job("shopify:webhooks", processPendingShopifyWebhooks));
+    void job("shopify:poll", shopifyPoll);
+  }
+  // Stuck-order ages and cancellation windows change with time even without new data
+  cron.schedule("17 * * * *", () => job("problems:detect", runProblemDetection));
   console.log("[worker] started");
 }
 

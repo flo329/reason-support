@@ -7,7 +7,7 @@ import clsx from "clsx";
 const ITEMS: { href: string; label: string; soon?: string }[] = [
   { href: "/", label: "Home" },
   { href: "/urgent", label: "Urgent tickets" },
-  { href: "/orders", label: "Order problems", soon: "Phase 3" },
+  { href: "/orders", label: "Order problems" },
   { href: "/activity", label: "Activity" },
   { href: "/settings", label: "Settings" },
 ];

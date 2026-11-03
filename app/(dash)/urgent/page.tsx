@@ -37,7 +37,7 @@ export default async function UrgentPage({ searchParams }: { searchParams: Promi
 
   const tickets = await prisma.ticket.findMany({
     where,
-    include: { customer: true, score: true },
+    include: { customer: true, score: true, linkedOrder: { select: { name: true, store: { select: { name: true } } } } },
     orderBy: [{ score: { score: "desc" } }, { firstUnansweredAt: { sort: "asc", nulls: "last" } }],
     take: 200,
   });
@@ -111,7 +111,8 @@ export default async function UrgentPage({ searchParams }: { searchParams: Promi
                 </a>
                 <div className="text-xs text-slate-500">
                   {t.customer?.name || t.customer?.email || "Unknown"}
-                  {t.orderNumbers.length > 0 && <> · #{t.orderNumbers.join(", #")}</>} · {t.assigneeName ?? "Unassigned"}
+                  {t.linkedOrder ? <> · {t.linkedOrder.name} ({t.linkedOrder.store.name})</> : t.orderNumbers.length > 0 && <> · #{t.orderNumbers.join(", #")}</>} ·{" "}
+                  {t.assigneeName ?? "Unassigned"}
                 </div>
               </div>
             </div>
@@ -161,8 +162,10 @@ export default async function UrgentPage({ searchParams }: { searchParams: Promi
                     <div>{t.customer?.name || "—"}</div>
                     <div className="text-xs text-slate-500">{t.customer?.email}</div>
                   </td>
-                  <td className="px-3 py-3 tabular-nums">{t.orderNumbers.length ? `#${t.orderNumbers.join(", #")}` : "—"}</td>
-                  <td className="px-3 py-3 text-slate-400">—</td>
+                  <td className="px-3 py-3 tabular-nums">
+                    {t.linkedOrder?.name ?? (t.orderNumbers.length ? `#${t.orderNumbers.join(", #")}` : "—")}
+                  </td>
+                  <td className="px-3 py-3 text-slate-600">{t.linkedOrder?.store.name ?? <span className="text-slate-400">—</span>}</td>
                   <td className={clsx("px-3 py-3 tabular-nums", (t.waitH ?? 0) >= 24 && "font-semibold text-red-600")}>
                     {formatWait(t.waitH)}
                   </td>
@@ -176,7 +179,6 @@ export default async function UrgentPage({ searchParams }: { searchParams: Promi
           </table>
         </div>
       )}
-      <p className="text-xs text-slate-400">Store column fills in once Shopify is connected (Phase 3).</p>
     </div>
   );
 }
