@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  AGENT
+}
+
+/// People who can log into this platform.
+model User {
+  id             String        @id @default(cuid())
+  email          String        @unique
+  name           String?
+  passwordHash   String?
+  role           Role          @default(AGENT)
+  active         Boolean       @default(true)
+  /// Matching Gorgias user id (resolved by email) – used for "Assign to me" and as message sender
+  gorgiasUserId  Int?
+  createdAt      DateTime      @default(now())
+  lastLoginAt    DateTime?
+  activities     ActivityLog[]
+}
+
+/// Gorgias helpdesk users (agents), synced from the API.
+model GorgiasAgent {
+  id        Int      @id
+  email     String
+  name      String?
+  role      String?
+  active    Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+}
+
+/// Gorgias customer (local cache).
+model Customer {
+  id          Int      @id
+  email       String?
+  name        String?
+  demo        Boolean  @default(false)
+  tickets     Ticket[]
+  updatedAt   DateTime @updatedAt
+
+  @@index([email])
+}
+
+/// Gorgias ticket (local cache) plus derived conversation state.
+model Ticket {
+  id                    Int             @id
+  status                String
+  priority              String?
+  channel               String?
+  subject               String?
+  customerId            Int?
+  customer              Customer?       @relation(fields: [customerId], references: [id])
+  assigneeUserId        Int?
+  assigneeName          String?
+  assigneeTeamId        Int?
+  assigneeTeamName      String?
+  tags                  String[]
+  spam                  Boolean         @default(false)
+  messagesCount         Int             @default(0)
+  /// Customer messages after the last real agent reply
+  unansweredCount       Int             @default(0)
+  firstUnansweredAt     DateTime?
+  lastCustomerMessageAt DateTime?
+  lastAgentReplyAt      DateTime?
+  lastMessageAt         DateTime?
+  gorgiasCreatedAt      DateTime
+  gorgiasUpdatedAt      DateTime
+  snoozedUntil          DateTime?
+  messagesSyncedAt      DateTime?
+  demo                  Boolean         @default(false)
+  messages              TicketMessage[]
+  syncedAt              DateTime        @updatedAt
+
+  @@index([status])
+  @@index([customerId])
+  @@index([gorgiasUpdatedAt])
+}
+
+model TicketMessage {
+  id          Int      @id
+  ticketId    Int
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  fromAgent   Boolean
+  isPublic    Boolean  @default(true)
+  channel     String?
+  via         String?
+  senderEmail String?
+  senderName  String?
+  bodyText    String?  @db.Text
+  createdAt   DateTime
+
+  @@index([ticketId, createdAt])
+}
+
+/// Incoming webhook payloads (Gorgias now, Shopify in phase 3). Processed async.
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  source      String
+  topic       String?
+  payload     Json
+  status      String    @default("pending") // pending | done | error
+  error       String?
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([status, receivedAt])
+}
+
+/// Cursor / last-run bookkeeping for background jobs.
+model SyncState {
+  key       String   @id
+  value     String?
+  lastRunAt DateTime?
+  lastError String?
+  updatedAt DateTime @updatedAt
+}
+
+/// Configurable settings (JSON values). Fully editable in phase 5.
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+/// Every action taken through the platform.
+model ActivityLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  targetType String?
+  targetId   String?
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
