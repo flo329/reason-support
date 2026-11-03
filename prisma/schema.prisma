@@ -26,6 +26,7 @@ model User {
   lastLoginAt    DateTime?
   activities     ActivityLog[]
   handledProblems OrderProblem[]
+  contacts        CustomerContact[]
 }
 
 /// Gorgias helpdesk users (agents), synced from the API.
@@ -295,8 +296,58 @@ model OrderProblem {
   handledById    String?
   handledBy      User?         @relation(fields: [handledById], references: [id])
   linkedTicketId Int?
+  contacts       CustomerContact[]
 
   @@unique([orderId, type])
   @@index([status, type])
   @@index([linkedTicketId])
+}
+
+// ---------------------------------------------------------------- Notify customer (phase 4)
+
+/// Editable message templates per problem type and language.
+model MessageTemplate {
+  id          String   @id @default(cuid())
+  /// CANCELLED | OUT_OF_STOCK | OVERSOLD | STUCK
+  type        String
+  language    String   @default("en")
+  name        String
+  subject     String
+  body        String   @db.Text
+  /// Built-in template (can be reset, not deleted)
+  builtin     Boolean  @default(false)
+  builtinKey  String?  @unique
+  sortOrder   Int      @default(0)
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@index([type, language])
+}
+
+/// Every message sent to a customer through the platform (always triggered by an agent click).
+model CustomerContact {
+  id               String        @id @default(cuid())
+  problemId        String?
+  problem          OrderProblem? @relation(fields: [problemId], references: [id], onDelete: SetNull)
+  orderId          String?
+  ticketId         Int?
+  /// "reply" (existing ticket) | "new_ticket"
+  mode             String
+  toEmail          String
+  subject          String
+  body             String        @db.Text
+  templateId       String?
+  /// Groups messages sent in one bulk action
+  bulkId           String?
+  /// sent | failed | simulated (demo data, nothing sent)
+  status           String
+  error            String?
+  gorgiasMessageId Int?
+  sentById         String
+  sentBy           User          @relation(fields: [sentById], references: [id])
+  sentAt           DateTime      @default(now())
+
+  @@index([problemId])
+  @@index([bulkId])
 }

@@ -3,7 +3,9 @@
 Internal platform for the Reason Clothing support team. It sits on top of Gorgias, Shopify and A2000 and adds:
 urgent-ticket detection, proactive order-problem alerts, and an activity log.
 
-**Status: Phase 3:** login, Gorgias sync + webhooks, urgency scoring, Urgent Tickets dashboard, Slack alerts, settings, Shopify (multiple stores) + Order Problems monitor.
+**Status: Phase 4:** login, Gorgias sync + webhooks, urgency scoring, Urgent Tickets dashboard, Slack alerts, settings, Shopify (multiple stores) + Order Problems monitor, notify-customer flow with templates (single + bulk), A2000 stock adapter.
+
+This app sits between Shopify (where customers order), A2000 (the ERP and source of truth for warehouse stock) and Gorgias (where the support team talks to customers).
 
 > v1 never sends anything to customers automatically. Every customer-facing message requires an agent click.
 
@@ -128,7 +130,54 @@ Detection lives in `lib/problems/detect.ts`, a pure function with unit tests in 
 - A problem resolves itself when the condition goes away, for example when stock arrives or the order ships.
 - Each problem links to the customer's open Gorgias ticket, matched by email or by an order number mentioned in the ticket. That ticket gets a +20 urgency boost and shows the order and store.
 - Shopify customer history (order count and lifetime spend) flows into the VIP and repeat-customer scoring.
-- **Mark handled** records who handled the problem and when. **Notify customer** arrives in Phase 4.
+- **Mark handled** records who handled the problem and when. **Notify customer** is covered below.
+
+## Notify customer
+
+Every customer message needs an explicit click from an agent. Nothing is ever sent by a background job.
+
+1. On **Order problems**, click **Notify customer**.
+2. Pick a template (EN or ES). Order data is filled in automatically, e.g. `{{customer_first_name}}`, `{{order_number}}`, `{{items}}`, `{{refund_status}}`. Edit the text freely.
+3. Replace every `[[fill-in]]`, such as `[[restock date]]`. **Send** stays disabled until you do.
+4. Choose how to send:
+   - **Reply on the customer's open email ticket** (the default when one exists), or
+   - **Create a new Gorgias email ticket**, tagged `proactive`.
+5. Confirm. The problem is marked *Notified*, the message is stored with who sent it and when, and the activity log records it.
+
+Messaging the same customer about the same problem again requires an extra checkbox.
+
+**Bulk notify:** click a SKU in "SKUs short on stock", then **Bulk notify everyone affected**. You edit one template, and each customer gets a personalised copy. You can untick customers, check the preview, and see the result per order.
+
+**Templates:** edit them in **Settings → Message templates**. There are built-in EN and ES templates for cancelled, out of stock (wait / swap / refund), oversold and delayed. You can add your own. Built-in templates can be reset to their original text.
+
+Required for real sends:
+
+| Variable | What |
+| --- | --- |
+| `GORGIAS_SUPPORT_EMAIL` | The address customers receive mail from. It must be an email integration in Gorgias. |
+| `GORGIAS_SUPPORT_NAME` | The sender name (default: "Reason Clothing"). |
+
+Demo orders (`npm run seed:demo`) are never sent. They are recorded as *simulated*.
+
+## A2000 (ERP) stock
+
+A2000 is the source of truth for physical warehouse stock. When it's configured, problem detection uses **the lower of Shopify on-hand and A2000 on-hand**, and the problem card says when the shortage comes from A2000.
+
+**How it reads A2000.** It uses read-only Oracle queries through `node-oracledb` in thin mode, so no Oracle client install is needed.
+
+**How Shopify SKUs are matched to A2000 items.** Matching uses the `VX_WEB_SKUS` view, where `SKU` is style + color and `SKU_Z` is style + color + size. Three Shopify formats are matched:
+- style + color + `-` + size (e.g. `ABC-123001-S`)
+- `SKU_Z` as-is (e.g. `ABC-123001OS`)
+- style + color for one-size items
+
+**Stock source.** Stock is `ON_HAND` for that size slot in `VR_INVENT_WH_Z`, summed over `A2000_WAREHOUSES` (default `01`).
+
+**Setup:**
+1. Ask your A2000 admin for a **read-only** database user that can `SELECT` from `VX_WEB_SKUS` and `VR_INVENT_WH_Z`.
+2. Set `A2000_DB_USER`, `A2000_DB_PASSWORD`, and either `A2000_DB_CONNECT_STRING` (`host:1521/service`) or `A2000_DB_HOST` / `PORT` / `SERVICE`. Set `A2000_DB_SCHEMA` too.
+3. Test it: `npm run a2000 -- <shopify sku> <shopify sku>`. It prints the on-hand stock for each SKU.
+
+The server running this app must be able to reach the A2000 database. If A2000 runs on-premise, that may need a VPN or firewall rule.
 
 ## Urgency scoring
 

@@ -44,6 +44,13 @@ export const env = {
     get baseUrl() {
       return `https://${this.domain}.gorgias.com`;
     },
+    /** Email address customers receive proactive messages from – must be an email integration in Gorgias */
+    get supportEmail() {
+      return process.env.GORGIAS_SUPPORT_EMAIL ?? "";
+    },
+    get supportName() {
+      return process.env.GORGIAS_SUPPORT_NAME || "Reason Clothing";
+    },
   },
 };
 

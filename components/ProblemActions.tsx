@@ -1,9 +1,20 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { markProblemHandled, reopenProblem } from "@/app/actions/problems";
 
-export function ProblemActions({ problemId, handled, handledLabel }: { problemId: string; handled: boolean; handledLabel?: string }) {
+export function ProblemActions({
+  problemId,
+  handled,
+  handledLabel,
+  notified,
+}: {
+  problemId: string;
+  handled: boolean;
+  handledLabel?: string;
+  notified?: boolean;
+}) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const run = (fn: () => Promise<{ ok: boolean; message: string }>) =>
@@ -26,7 +37,12 @@ export function ProblemActions({ problemId, handled, handledLabel }: { problemId
           Mark handled
         </button>
       )}
-      <span className="text-[11px] text-slate-400" title="Arrives in Phase 4">Notify customer – Phase 4</span>
+      <Link
+        href={`/orders/${problemId}/notify`}
+        className={`rounded border px-2 py-1 text-center text-xs font-medium ${notified ? "border-slate-300 bg-white text-slate-600 hover:bg-slate-50" : "border-slate-900 bg-slate-900 text-white hover:bg-slate-700"}`}
+      >
+        {notified ? "Message again" : "Notify customer"}
+      </Link>
       {error && <span className="text-xs text-red-600">{error}</span>}
     </div>
   );

@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { getScoringConfig } from "@/lib/settings";
 import { resetScoringSettings } from "@/app/actions/settings";
 import { aiEnabled } from "@/lib/ai/classify";
+import { a2000Configured } from "@/lib/a2000";
 import { slackEnabled } from "@/lib/slack";
 import { env } from "@/lib/env";
 import { ScoringForm } from "./ScoringForm";
@@ -39,9 +41,14 @@ export default async function SettingsPage() {
           <Status ok={stores.length > 0} label={`Shopify (${stores.map((s) => s.name).join(", ") || "no stores"})`} />
           <Status ok={slackEnabled()} label="Slack alerts" />
           <Status ok={aiEnabled()} label="Claude AI" />
+          <Status ok={a2000Configured()} label="A2000 stock" />
         </div>
         {!isAdmin && <p className="mt-2 text-sm text-amber-700">Only admins can change settings.</p>}
       </div>
+      <Link href="/settings/templates" className="block rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-400">
+        <div className="font-semibold">Message templates →</div>
+        <div className="text-sm text-slate-500">Edit the customer messages for cancelled, out-of-stock, oversold and delayed orders (EN + ES).</div>
+      </Link>
       <h2 className="text-lg font-semibold">Order problems</h2>
       <OrdersForm cfg={ordersCfg} disabled={!isAdmin} locations={locations} />
       <h2 className="text-lg font-semibold">Urgency scoring</h2>

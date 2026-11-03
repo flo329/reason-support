@@ -1,6 +1,6 @@
 /**
  * A2000 ERP stock adapter (read-only).
- * Phase 3: only the interface + a mock. Phase 5 plugs in the real A2000 lookup.
+ * Real lookup: lib/a2000/oracle.ts (read-only Oracle queries). Mock used when A2000_DB_* isn't set.
  * When a provider returns a number for a SKU, problem detection uses the lower of Shopify on-hand and A2000 stock.
  */
 
@@ -40,7 +40,17 @@ export class MockStockProvider implements StockProvider {
 
 let provider: StockProvider | null = null;
 
+/** Real A2000 Oracle connection when A2000_DB_* is configured, otherwise the mock. */
 export function getStockProvider(): StockProvider {
-  provider ??= new MockStockProvider();
+  if (!provider) {
+    // Lazy require so the Oracle driver is only loaded when A2000 is configured
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { OracleStockProvider, oracleConfigFromEnv } = require("./oracle") as typeof import("./oracle");
+    const cfg = oracleConfigFromEnv();
+    provider = cfg ? new OracleStockProvider(cfg) : new MockStockProvider();
+  }
   return provider;
 }
+
+export const a2000Configured = () =>
+  Boolean(process.env.A2000_DB_USER && process.env.A2000_DB_PASSWORD && (process.env.A2000_DB_CONNECT_STRING || process.env.A2000_DB_HOST));

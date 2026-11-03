@@ -37,4 +37,12 @@ export const ACTION_LABELS: Record<string, string> = {
   "problem.handled": "Marked order problem handled",
   "problem.reopened": "Reopened order problem",
   "sync.shopify.manual": "Triggered Shopify sync",
+  "customer.notified": "Notified customer via Gorgias",
+  "customer.notified_bulk": "Notified customer (bulk)",
+  "customer.notify_failed": "Customer notification failed",
+  "customer.bulk_done": "Bulk notification finished",
+  "template.updated": "Edited message template",
+  "template.created": "Created message template",
+  "template.deleted": "Deleted message template",
+  "template.reset": "Reset message template",
 };

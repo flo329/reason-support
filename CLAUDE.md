@@ -6,7 +6,12 @@ Internal support platform for Reason Clothing (Gorgias + Shopify + A2000). See R
 - Phase 1 done: auth, Gorgias client/sync/webhooks, ticket cache.
 - Phase 2 done: urgency scoring (`lib/scoring/`), Urgent Tickets page + actions, Slack alerts, scoring settings.
 - Phase 3 done (built against demo data; real-store test pending): Shopify client/sync/webhooks (`lib/shopify/`), problem detection (`lib/problems/`), Order Problems page.
-- Next: verify Phase 3 against the real stores (`npm run shopify -- check` / `sync`), then Phase 4 (notify-customer templates via Gorgias), Phase 5 (A2000 adapter, polish).
+- Phase 4 done (demo-tested): templates (`lib/templates/`), notify flow (`lib/notify.ts`, /orders/[id]/notify, /orders/bulk), template editor (/settings/templates).
+- A2000 adapter built early (`lib/a2000/oracle.ts`, `sku.ts`); its SQL was checked read-only against A2000. The app needs A2000_DB_* credentials + network access to use it.
+- Next: verify against real Shopify/Gorgias/A2000, then Phase 5 (A2000 warehouse order status for delayed orders, polish).
+
+## Context from the user
+- A2000 is the company ERP and the source of truth for warehouse stock; this app is the layer between Shopify and the warehouse.
 - The user approves each phase before the next one starts. Stop after each phase with run/test instructions.
 
 ## Rules from the user

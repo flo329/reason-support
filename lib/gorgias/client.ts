@@ -101,4 +101,9 @@ export const gorgias = {
   createMessage(ticketId: number, message: Record<string, unknown>) {
     return request<GorgiasMessage>("POST", `/tickets/${ticketId}/messages`, { body: message });
   },
+
+  /** Create a ticket (with its first message). Used for proactive outreach when there's no open email ticket. */
+  createTicket(ticket: Record<string, unknown>) {
+    return request<GorgiasTicket>("POST", "/tickets", { body: ticket });
+  },
 };

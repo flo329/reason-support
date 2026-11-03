@@ -152,12 +152,20 @@ export default async function OrdersPage({
         </form>
       </div>
       {sp.sku && (
-        <p className="text-sm">
-          Filtered to SKU <span className="font-mono font-semibold">{sp.sku}</span> ·{" "}
-          <a className="text-blue-600 underline" href={link({ sku: undefined })}>
-            clear
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span>
+            Filtered to SKU <span className="font-mono font-semibold">{sp.sku}</span> ·{" "}
+            <a className="text-blue-600 underline" href={link({ sku: undefined })}>
+              clear
+            </a>
+          </span>
+          <a
+            href={`/orders/bulk?sku=${encodeURIComponent(sp.sku)}${sp.store ? `&store=${sp.store}` : ""}`}
+            className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-700"
+          >
+            Bulk notify everyone affected →
           </a>
-        </p>
+        </div>
       )}
       <p className="text-xs text-slate-500">{problems.length} problems</p>
 
@@ -224,6 +232,7 @@ export default async function OrdersPage({
                   problemId={p.id}
                   handled={p.status === "HANDLED"}
                   handledLabel={p.handledAt ? `${handledBy}, ${formatDateTime(p.handledAt)}` : undefined}
+                  notified={p.status === "NOTIFIED" || Boolean(p.contactedAt)}
                 />
               </div>
             </li>
