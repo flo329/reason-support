@@ -45,6 +45,10 @@ model Customer {
   email       String?
   name        String?
   demo        Boolean  @default(false)
+  /// VIP flag (from tags now; from Shopify order history in phase 3)
+  vip         Boolean  @default(false)
+  ordersCount Int?
+  totalSpent  Decimal? @db.Decimal(12, 2)
   tickets     Ticket[]
   updatedAt   DateTime @updatedAt
 
@@ -77,8 +81,11 @@ model Ticket {
   gorgiasUpdatedAt      DateTime
   snoozedUntil          DateTime?
   messagesSyncedAt      DateTime?
+  /// Order numbers mentioned in the ticket (e.g. "#RC10482" -> "10482")
+  orderNumbers          String[]
   demo                  Boolean         @default(false)
   messages              TicketMessage[]
+  score                 TicketScore?
   syncedAt              DateTime        @updatedAt
 
   @@index([status])
@@ -144,4 +151,27 @@ model ActivityLog {
   createdAt  DateTime @default(now())
 
   @@index([createdAt])
+}
+
+/// Urgency score for a ticket (recomputed on every sync and every few minutes).
+model TicketScore {
+  ticketId       Int       @id
+  ticket         Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  score          Int
+  /// [{ code, label, points, tone }]
+  reasons        Json
+  /// Threat categories detected: legal, chargeback, fraud, public, escalation
+  threats        String[]
+  threatAt       DateTime?
+  aiReason       String?
+  aiResult       Json?
+  aiHash         String?
+  aiCheckedAt    DateTime?
+  computedAt     DateTime  @default(now())
+  /// Slack alert bookkeeping (reset when an agent replies)
+  alertedAt      DateTime?
+  alertedScore   Int?
+  threatAlertedAt DateTime?
+
+  @@index([score])
 }

@@ -9,7 +9,7 @@ const ITEMS: { href: string; label: string; soon?: string }[] = [
   { href: "/urgent", label: "Urgent tickets" },
   { href: "/orders", label: "Order problems", soon: "Phase 3" },
   { href: "/activity", label: "Activity" },
-  { href: "/settings", label: "Settings", soon: "Phase 5" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export function Nav() {

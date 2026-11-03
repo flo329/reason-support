@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
 import { gorgias } from "./client";
 import { deriveConversationState } from "./conversation";
+import { rescoreTickets } from "@/lib/scoring/run";
 import type { GorgiasMessage, GorgiasTicket } from "./types";
 
 const SYNC_KEY = "gorgias.tickets";
@@ -94,6 +95,7 @@ export async function syncTicketById(id: number) {
   const t = await gorgias.getTicket(id);
   const messages = t.status === "open" ? await gorgias.listTicketMessages(id) : undefined;
   await saveTicket(t, messages);
+  await rescoreTickets([id]);
   return t;
 }
 
@@ -120,6 +122,7 @@ export async function syncTicketsIncremental(): Promise<SyncResult> {
   let scanned = 0;
   let saved = 0;
   let messagesFetched = 0;
+  const changed: number[] = [];
 
   try {
     outer: for (let page = 0; page < MAX_PAGES; page++) {
@@ -141,6 +144,7 @@ export async function syncTicketsIncremental(): Promise<SyncResult> {
           messagesFetched++;
         }
         await saveTicket(t, messages);
+        changed.push(t.id);
         saved++;
       }
       cursor = res.meta?.next_cursor;
@@ -165,6 +169,7 @@ export async function syncTicketsIncremental(): Promise<SyncResult> {
     throw err;
   }
 
+  if (changed.length) await rescoreTickets(changed);
   return { scanned, saved, messagesFetched, since: since.toISOString() };
 }
 

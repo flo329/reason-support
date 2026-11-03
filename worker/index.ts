@@ -8,6 +8,7 @@ import cron from "node-cron";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/db";
 import { processPendingGorgiasWebhooks, syncAgents, syncTicketsIncremental } from "@/lib/gorgias/sync";
+import { rescoreTickets } from "@/lib/scoring/run";
 
 const running = new Set<string>();
 
@@ -30,6 +31,9 @@ async function job(name: string, fn: () => Promise<unknown>) {
 }
 
 function main() {
+  // Waiting time grows even when nothing changes, so rescore all open tickets regularly.
+  // AI calls only happen when a ticket's text changed, so this is cheap.
+  cron.schedule("*/5 * * * *", () => job("scoring:rescore", () => rescoreTickets()));
   if (!env.gorgias.configured) {
     console.warn("[worker] Gorgias not configured (GORGIAS_EMAIL / GORGIAS_API_KEY). Gorgias jobs are disabled.");
   } else {

@@ -3,7 +3,7 @@
 Internal platform for the Reason Clothing support team. It sits on top of Gorgias, Shopify and A2000 and adds:
 urgent-ticket detection, proactive order-problem alerts, and an activity log.
 
-**Status: Phase 1:** project setup, login, Gorgias connection, ticket sync, webhooks, basic ticket queue.
+**Status: Phase 2:** login, Gorgias sync + webhooks, urgency scoring, Urgent Tickets dashboard with actions, Slack alerts, scoring settings.
 
 > v1 never sends anything to customers automatically. Every customer-facing message requires an agent click.
 
@@ -56,6 +56,10 @@ Tests: `npm test`. Type check: `npm run typecheck`.
 | `GORGIAS_BACKFILL_DAYS` | First sync imports open tickets updated in the last N days (default 14) |
 | `GORGIAS_POLL_CRON` | Poll schedule (default every 3 minutes) |
 | `GORGIAS_RATE_LIMIT` | Max calls per 20s per process (Gorgias allows 40; default 30) |
+| `SLACK_WEBHOOK_URL` | Optional. Slack incoming webhook for urgent/threat alerts |
+| `ANTHROPIC_API_KEY` | Optional. Enables Claude tone/threat classification |
+| `ANTHROPIC_MODEL` | Optional. Defaults to `claude-opus-5-5`; `claude-haiku-5-5` is far cheaper for high volume |
+| `AI_MAX_PER_RUN` | Max Claude calls per scoring run (default 25) |
 
 ## Users and login
 
@@ -88,6 +92,31 @@ Polling every 3 minutes works without this. Webhooks make new messages show up w
 7. Save. You can check deliveries under the integration's **Events** tab.
 
 The endpoint stores the event, replies right away, and then re-syncs the ticket in the background. Any event left unprocessed is picked up by the worker within a minute.
+
+## Urgency scoring
+
+Every open ticket gets a score from 0 to 100. Scores are recalculated whenever a ticket syncs, and every 5 minutes because waiting time keeps growing. The logic is in `lib/scoring/engine.ts` and is covered by unit tests. All weights and keyword lists can be changed on **Settings** (admins only).
+
+| Signal | Default |
+| --- | --- |
+| Unanswered customer messages | +8 for each message after the first, max 25 |
+| Waiting since first unanswered message | +1 per hour, max 25 |
+| Threat keywords (EN + ES, whole words, case and accents ignored) | legal 35, chargeback 30, fraud 20, public/review 15, escalation 10; max 50 combined |
+| Angry tone | ALL CAPS 8, `!!!` 5, insults 10; max 15 |
+| Claude AI urgency (optional) | +5 per level (0–3), plus any threats it finds and a one-line reason |
+| VIP (ticket tag `vip`) / repeat customer | +10 / +5 |
+| Order value | ≥ $150 +5, ≥ $300 +10 (Phase 3) |
+| Linked order problem | +20 (Phase 3) |
+| Agent replied last | score × 0.5 |
+
+Auto-replies from Gorgias rules and internal notes don't count as an agent reply.
+
+**Slack alerts** are sent once per ticket when the score reaches 70, or right away when a legal or chargeback threat appears. They re-arm after an agent replies. At most 10 alerts go out per run, and the rest are summarised, so the first sync doesn't flood the channel.
+
+**Dashboard actions** (each one is written to the activity log):
+- **Mark urgent:** adds the tag `urgent` and sets priority to `high` in Gorgias.
+- **Assign to me:** needs your login email to match a Gorgias agent.
+- **Note:** adds an internal note in Gorgias. Customers never see it.
 
 ## Deployment notes
 

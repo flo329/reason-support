@@ -28,4 +28,9 @@ export const ACTION_LABELS: Record<string, string> = {
   "auth.login": "Signed in",
   "sync.gorgias.manual": "Triggered Gorgias sync",
   "user.created": "User created",
+  "ticket.mark_urgent": "Marked ticket urgent in Gorgias",
+  "ticket.assign_self": "Assigned ticket to self",
+  "ticket.internal_note": "Added internal note",
+  "scoring.rescore": "Rescored all tickets",
+  "settings.scoring": "Updated scoring settings",
 };
